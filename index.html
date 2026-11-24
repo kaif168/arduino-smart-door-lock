@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arduino Smart Door Lock & Security Monitoring Dashboard</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome 6 Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Firebase v10 JS SDK (Compat mode for easy integration) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- Header Navbar -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-logo">
+          <i class="fas fa-shield-halved"></i>
+        </div>
+        <div class="brand-text">
+          <h1>CYBERLOCK IoT</h1>
+          <p>Arduino Smart Security Monitoring</p>
+        </div>
+      </div>
+
+      <div class="system-status-group">
+        <div class="status-badge">
+          <span class="status-dot" id="systemStatusDot"></span>
+          <span id="systemStatusText">ESP32 ONLINE</span>
+        </div>
+
+        <div class="wifi-info">
+          <i class="fas fa-wifi" style="color: var(--accent-cyan);"></i>
+          <span>-62 dBm</span>
+        </div>
+
+        <div class="wifi-info">
+          <i class="fas fa-battery-three-quarters" style="color: var(--status-success);"></i>
+          <span>98%</span>
+        </div>
+
+        <button class="btn-lockdown" id="btnLockdownHeader">
+          <i class="fas fa-triangle-exclamation"></i> LOCKDOWN
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs Bar -->
+    <nav class="nav-tabs-wrapper">
+      <ul class="nav-tabs">
+        <li>
+          <a class="tab-link active" data-tab="dashboard-tab">
+            <i class="fas fa-grip"></i> Control Dashboard
+          </a>
+        </li>
+        <li>
+          <a class="tab-link" data-tab="logs-tab">
+            <i class="fas fa-list-check"></i> Access Logs
+          </a>
+        </li>
+        <li>
+          <a class="tab-link" data-tab="analytics-tab">
+            <i class="fas fa-chart-line"></i> Security Analytics
+          </a>
+        </li>
+        <li>
+          <a class="tab-link" data-tab="users-tab">
+            <i class="fas fa-user-shield"></i> User Management
+          </a>
+        </li>
+        <li>
+          <a class="tab-link" data-tab="hardware-tab">
+            <i class="fas fa-microchip"></i> Hardware & Firmware
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Main Content Body -->
+    <main class="main-content">
+
+      <!-- ================= TAB 1: CONTROL DASHBOARD ================= -->
+      <div class="tab-pane active" id="dashboard-tab">
+        
+        <!-- Top Key Metrics Cards -->
+        <div class="metrics-grid">
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Lock Status</span>
+              <h3 id="metricDoorStatus" style="color: var(--status-danger);">LOCKED</h3>
+            </div>
+            <div class="stat-icon red">
+              <i class="fas fa-lock"></i>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Today's Accesses</span>
+              <h3 id="metricTodayAccess">24</h3>
+            </div>
+            <div class="stat-icon cyan">
+              <i class="fas fa-key"></i>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Denied Attempts</span>
+              <h3 id="metricDeniedAttempts">2</h3>
+            </div>
+            <div class="stat-icon red">
+              <i class="fas fa-user-slash"></i>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-info">
+              <span>Security Threat Level</span>
+              <h3 id="metricAlarmStatus" style="color: var(--status-success);">NORMAL</h3>
+            </div>
+            <div class="stat-icon green">
+              <i class="fas fa-shield-cat"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Core Panels Grid -->
+        <div class="dashboard-grid">
+          
+          <!-- Column 1: Lock Actuator Visualizer -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-door-closed"></i> Door Lock Actuator Control
+              </h2>
+              <span class="badge badge-info">ESP32 Servo Motor</span>
+            </div>
+
+            <div class="lock-visualizer-container locked" id="lockVisualizerContainer">
+              <div class="door-lock-wrapper">
+                <div class="lock-outer-ring"></div>
+                <button class="lock-icon-btn" id="lockIconBtn" title="Click to Toggle Lock State">
+                  <i class="fas fa-lock" id="lockIcon"></i>
+                </button>
+              </div>
+
+              <h2 class="lock-state-label" id="lockStateText">SYSTEM LOCKED</h2>
+              <p class="lock-state-sub" id="lockStateSubText">Secured - Deadbolt Engaged (Servo 90°)</p>
+
+              <div class="lock-actions">
+                <button class="btn-primary-action btn-unlock" id="btnUnlockMain">
+                  <i class="fas fa-lock-open"></i> UNLOCK DOOR
+                </button>
+                <button class="btn-primary-action btn-lock" id="btnLockMain">
+                  <i class="fas fa-lock"></i> LOCK DOOR
+                </button>
+              </div>
+
+              <!-- Security Modes Toolbar -->
+              <div class="mode-selector">
+                <div class="mode-selector-title">Select Operating Mode</div>
+                <div class="mode-buttons">
+                  <button class="btn-mode active" data-mode="standard">Standard</button>
+                  <button class="btn-mode" data-mode="autolock">Auto-Lock (10s)</button>
+                  <button class="btn-mode" data-mode="lockdown">Lockdown</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 2: Keypad & RFID Simulator -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-calculator"></i> 4x4 Keypad & RFID Terminal
+              </h2>
+              <span class="badge badge-success">MFRC522 Active</span>
+            </div>
+
+            <div class="keypad-container">
+              <!-- Digital LED Display -->
+              <div class="keypad-display">
+                <div class="keypad-display-dots" id="keypadDisplayDots">••••</div>
+                <div class="keypad-display-status" id="keypadDisplayStatus">ENTER PIN</div>
+              </div>
+
+              <!-- 4x4 Keypad Grid -->
+              <div class="keypad-grid">
+                <button class="key-btn" data-key="1">1</button>
+                <button class="key-btn" data-key="2">2</button>
+                <button class="key-btn" data-key="3">3</button>
+                
+                <button class="key-btn" data-key="4">4</button>
+                <button class="key-btn" data-key="5">5</button>
+                <button class="key-btn" data-key="6">6</button>
+                
+                <button class="key-btn" data-key="7">7</button>
+                <button class="key-btn" data-key="8">8</button>
+                <button class="key-btn" data-key="9">9</button>
+                
+                <button class="key-btn btn-clear" id="btnClearKey">CLR</button>
+                <button class="key-btn" data-key="0">0</button>
+                <button class="key-btn btn-submit" id="btnSubmitKey">OK</button>
+              </div>
+
+              <!-- RFID Simulator Trigger -->
+              <div class="rfid-simulator-box">
+                <div>
+                  <div style="font-size: 0.8rem; font-weight: 600; color: var(--text-main);">RFID Card Reader</div>
+                  <div style="font-size: 0.72rem; color: var(--text-dim);">Simulate MFRC522 Card Swipe</div>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="rfidUidInput" class="form-control" style="width: 110px; padding: 4px 8px; font-size: 0.78rem;" value="A1B2C3D4">
+                  <button class="rfid-badge-btn" id="btnScanRfid">
+                    <i class="fas fa-id-card"></i> SCAN CARD
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Live Security Feed Ticker -->
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-bolt"></i> Real-time Live Security Feed
+            </h2>
+            <span class="badge badge-info"><i class="fas fa-sync fa-spin"></i> Live Socket Feed</span>
+          </div>
+          <div class="activity-feed-container" id="activityFeedContainer">
+            <!-- Dynamic Activity Items Loaded via JS -->
+          </div>
+        </div>
+
+      </div>
+
+
+      <!-- ================= TAB 2: ACCESS LOGS ================= -->
+      <div class="tab-pane" id="logs-tab">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-list-check"></i> Security Access Audit Trail
+            </h2>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn-secondary" id="btnExportLogs">
+                <i class="fas fa-download"></i> Export CSV
+              </button>
+            </div>
+          </div>
+
+          <!-- Log Filters Bar -->
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+            <input type="text" id="logsSearchInput" class="form-control" placeholder="Search by User, PIN or Note...">
+            
+            <select id="filterMethodSelect" class="form-control">
+              <option value="ALL">All Methods</option>
+              <option value="PIN">PIN Keypad</option>
+              <option value="RFID">RFID Card</option>
+              <option value="Web">Web Remote</option>
+              <option value="Auto">Auto-Lock</option>
+            </select>
+
+            <select id="filterStatusSelect" class="form-control">
+              <option value="ALL">All Statuses</option>
+              <option value="Granted">Granted Only</option>
+              <option value="Denied">Denied Only</option>
+            </select>
+          </div>
+
+          <!-- Access Logs Table -->
+          <div class="table-responsive">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>User / Identity</th>
+                  <th>Authentication Method</th>
+                  <th>Status</th>
+                  <th>Event Notes</th>
+                </tr>
+              </thead>
+              <tbody id="logsTableBody">
+                <!-- Loaded via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ================= TAB 3: SECURITY ANALYTICS ================= -->
+      <div class="tab-pane" id="analytics-tab">
+        
+        <div class="charts-grid">
+          <!-- Hourly Line Chart -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-chart-line"></i> Hourly Access Density (24-Hour Timeline)
+              </h2>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="hourlyAccessChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Method Distribution Doughnut Chart -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-chart-pie"></i> Authentication Methods
+              </h2>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="accessMethodChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly Verdict Bar Chart & Insights -->
+        <div class="dashboard-grid">
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-chart-bar"></i> Weekly Granted vs Denied Attempts
+              </h2>
+            </div>
+            <div class="chart-wrapper">
+              <canvas id="verdictChart"></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-shield-heart"></i> System Security Insights
+              </h2>
+            </div>
+            <div style="font-size: 0.88rem; color: var(--text-muted); line-height: 1.7;">
+              <p style="margin-bottom: 12px;">
+                <strong style="color: var(--accent-cyan);">• Peak Access Period:</strong> High volume observed between 12:00 PM and 06:00 PM.
+              </p>
+              <p style="margin-bottom: 12px;">
+                <strong style="color: var(--status-success);">• Primary Entry Method:</strong> Keypad PIN accounts for 45% of total entries.
+              </p>
+              <p style="margin-bottom: 12px;">
+                <strong style="color: var(--status-warning);">• Intrusion Prevention:</strong> 3 incorrect PIN entries triggered automated lockout.
+              </p>
+              <div style="background: rgba(0, 242, 254, 0.08); padding: 12px; border-radius: 8px; border-left: 3px solid var(--accent-cyan); margin-top: 15px;">
+                <span style="color: var(--text-main); font-weight: 600;">Overall Security Score: 96 / 100</span>
+                <p style="font-size: 0.78rem; margin-top: 4px;">System running optimal firmware v2.4 with active brute-force rate-limiting.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+
+      <!-- ================= TAB 4: USER MANAGEMENT ================= -->
+      <div class="tab-pane" id="users-tab">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-users-gear"></i> Authorized Users & Access Credentials
+            </h2>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn-primary-action btn-unlock" id="btnGenerateOtp">
+                <i class="fas fa-key"></i> Generate Guest OTP
+              </button>
+              <button class="btn-primary-action btn-unlock" style="background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));" id="btnAddUserOpen">
+                <i class="fas fa-user-plus"></i> Add User
+              </button>
+            </div>
+          </div>
+
+          <div id="otpDisplayBox" style="margin-bottom: 1.5rem;"></div>
+
+          <div class="users-grid" id="usersGrid">
+            <!-- User Cards Rendered via JS -->
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ================= TAB 5: HARDWARE & FIRMWARE HUB ================= -->
+      <div class="tab-pane" id="hardware-tab">
+        
+        <div class="dashboard-grid">
+          <!-- Hardware Connection Config -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-wifi"></i> ESP32 IoT Gateway Configuration
+              </h2>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Integration Mode</label>
+              <select id="hardwareModeSelect" class="form-control">
+                <option value="simulated">Simulated Hardware Mode (Browser Engine)</option>
+                <option value="esp32_http">Live ESP32 Wi-Fi HTTP API Gateway</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">ESP32 IP Address (Local Network)</label>
+              <input type="text" id="esp32IpInput" class="form-control" value="192.168.1.150">
+            </div>
+
+            <button class="btn-primary-action btn-unlock" id="btnSaveConfig" style="width: 100%; margin-top: 10px;">
+              <i class="fas fa-save"></i> Save Configuration
+            </button>
+          </div>
+
+          <!-- Hardware Bill of Materials -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                <i class="fas fa-boxes-stacked"></i> Circuit Hardware Bill of Materials (BOM)
+              </h2>
+            </div>
+            <div class="table-responsive">
+              <table class="custom-table">
+                <thead>
+                  <tr>
+                    <th>Component</th>
+                    <th>Specification</th>
+                    <th>ESP32 Pinout</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>ESP32 Dev Board</td>
+                    <td>Dual-core 240MHz Wi-Fi</td>
+                    <td>Microcontroller</td>
+                  </tr>
+                  <tr>
+                    <td>Servo Motor</td>
+                    <td>SG90 / MG996R 5V</td>
+                    <td>GPIO 13 (PWM)</td>
+                  </tr>
+                  <tr>
+                    <td>RFID Reader</td>
+                    <td>MFRC522 13.56 MHz SPI</td>
+                    <td>SS: GPIO 5, RST: GPIO 0</td>
+                  </tr>
+                  <tr>
+                    <td>Keypad</td>
+                    <td>4x4 Matrix Keypad</td>
+                    <td>Rows: 32,33,25,26 Cols: 17,16,4,15</td>
+                  </tr>
+                  <tr>
+                    <td>LCD Display</td>
+                    <td>16x2 I2C Display</td>
+                    <td>SDA: GPIO 21, SCL: GPIO 22</td>
+                  </tr>
+                  <tr>
+                    <td>Status Buzzer</td>
+                    <td>Active 5V Buzzer</td>
+                    <td>GPIO 12</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Firmware Code Viewer -->
+        <div class="card" style="margin-top: 1.5rem;">
+          <div class="card-header">
+            <h2 class="card-title">
+              <i class="fas fa-code"></i> ESP32 Arduino C++ Firmware Sketch (esp32_smart_door_lock.ino)
+            </h2>
+            <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('firmwareCodeBlock').innerText); alert('Firmware Code Copied!');">
+              <i class="fas fa-copy"></i> Copy Code
+            </button>
+          </div>
+
+          <pre class="code-container" id="firmwareCodeBlock"><code>/*
+ * Engineering Project: Arduino-Based Smart Door Lock Firmware
+ * Language: C++ (ESP32 Arduino Framework)
+ */
+
+#include &lt;WiFi.h&gt;
+#include &lt;WebServer.h&gt;
+#include &lt;ESP32Servo.h&gt;
+#include &lt;MFRC522.h&gt;
+#include &lt;Keypad.h&gt;
+#include &lt;LiquidCrystal_I2C.h&gt;
+
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+WebServer server(80);
+Servo doorServo;
+
+void setup() {
+  Serial.begin(115200);
+  doorServo.attach(13);
+  doorServo.write(90); // Locked State
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+
+  server.on("/api/status", HTTP_GET, [](){
+    server.send(200, "application/json", "{\"status\":\"OK\"}");
+  });
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+}</code></pre>
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+
+  <!-- ================= MODAL: ADD USER ================= -->
+  <div class="modal-backdrop" id="addUserModal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 style="font-size: 1.1rem; color: var(--text-main);">Add Authorized User</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+
+      <form id="addUserForm">
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="newUserName" class="form-control" placeholder="e.g. Sarah Connor" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Access Role</label>
+          <select id="newUserRole" class="form-control">
+            <option value="Admin">Admin</option>
+            <option value="Member" selected>Family Member</option>
+            <option value="Guest">Guest</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Keypad PIN Code (4-6 Digits)</label>
+          <input type="text" id="newUserPin" class="form-control" placeholder="e.g. 4321" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">RFID Card UID (Optional)</label>
+          <input type="text" id="newUserRfid" class="form-control" placeholder="e.g. B2C3D4E5">
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.25rem;">
+          <button type="button" class="btn-secondary btn-modal-close">Cancel</button>
+          <button type="submit" class="btn-primary-action btn-unlock" id="btnAddUserSubmit">Save User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Custom Scripts -->
+  <script src="js/firebase-config.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
